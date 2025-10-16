@@ -1,12 +1,19 @@
 <template>
   <section class="row">
     <div class="card">
-      <h3 class="title" style="font-size: 18px; margin-bottom: 12px">
-        Today's Attendance
-      </h3>
+      <div class="header-row">
+        <h3 class="title">Today's Attendance</h3>
 
+        <!-- Big, readable clock -->
+        <div class="now-badge">
+          <div class="time">{{ nowTime }}</div>
+          <div class="date">{{ todayStr }}</div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
       <div class="toolbar no-print">
-        <div>
+        <div class="field">
           <label>Filter</label>
           <select v-model="presentFilter">
             <option value="all">All</option>
@@ -17,7 +24,7 @@
           </select>
         </div>
 
-        <div>
+        <div class="field">
           <label>Punctuality</label>
           <select v-model="punctualityFilter">
             <option value="all">All</option>
@@ -26,7 +33,7 @@
           </select>
         </div>
 
-        <div>
+        <div class="field">
           <label>Department</label>
           <select v-model.number="deptFilter">
             <option :value="0">All</option>
@@ -40,60 +47,39 @@
           </select>
         </div>
 
-        <div>
+        <div class="field field--search">
           <label>Search Employee</label>
-          <input placeholder="Search by name or email" v-model="q" />
-          <div class="now-badge">
-            <div class="time">{{ nowTime }}</div>
-            <div class="date">{{ todayStr }}</div>
+          <div class="search-line">
+            <input
+              class="search-input"
+              placeholder="Search by name or email"
+              v-model="q"
+            />
           </div>
         </div>
       </div>
 
-      <div class="spacer"></div>
-
-      <div class="kpis">
-        <div class="kpi">
-          <div class="label">Present Today</div>
-          <div class="value">{{ presentToday.length }}</div>
-          <div class="delta">{{ todayStr }}</div>
+      <!-- KPI Section — jake-UI -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Present</div>
+          <div class="kpi-value">{{ kpiCounts.present }}</div>
         </div>
-        <div class="kpi">
-          <div class="label">Absent</div>
-          <div class="value">{{ absentTotal }}</div>
-          <div class="delta">{{ todayStr }}</div>
+        <div class="kpi-card">
+          <div class="kpi-label">Absent</div>
+          <div class="kpi-value">{{ kpiCounts.absent }}</div>
         </div>
-        <div class="kpi">
-          <div class="label">Rest Day</div>
-          <div class="value">
-            {{
-              presentToday.filter((r) => r.status === "Rest Day").length +
-              notPresentToday.filter((r) => r.status === "Rest Day").length
-            }}
-          </div>
-          <div class="delta">{{ todayStr }}</div>
+        <div class="kpi-card">
+          <div class="kpi-label">Rest Day</div>
+          <div class="kpi-value">{{ kpiCounts.restDay }}</div>
         </div>
-        <div class="kpi">
-          <div class="label">On Time Today</div>
-          <div class="value">
-            {{
-              presentToday.filter(
-                (r) => r.status === "Present" && r.punctuality === "On Time"
-              ).length
-            }}
-          </div>
-          <div class="delta">{{ todayStr }}</div>
+        <div class="kpi-card">
+          <div class="kpi-label">On Time</div>
+          <div class="kpi-value">{{ kpiCounts.onTime }}</div>
         </div>
-        <div class="kpi">
-          <div class="label">Late Today</div>
-          <div class="value">
-            {{
-              presentToday.filter(
-                (r) => r.status === "Present" && r.punctuality === "Late"
-              ).length
-            }}
-          </div>
-          <div class="delta">{{ todayStr }}</div>
+        <div class="kpi-card">
+          <div class="kpi-label">Late</div>
+          <div class="kpi-value">{{ kpiCounts.late }}</div>
         </div>
       </div>
     </div>
@@ -119,6 +105,14 @@
               v-for="row in displayRows"
               :key="row.key"
               :style="row.user_id ? 'cursor:pointer' : ''"
+              @click="
+                row.user_id
+                  ? $router.push({
+                      name: 'employee-report',
+                      query: { user_id: row.user_id },
+                    })
+                  : null
+              "
             >
               <td>
                 <div class="emp">
@@ -126,15 +120,17 @@
                   <div class="dept">{{ row.deptName }}</div>
                 </div>
               </td>
-              <td>{{ row.time_in_fmt || "—" }}</td>
-              <td>{{ row.lunch_start_fmt || "—" }}</td>
-              <td>{{ row.lunch_end_fmt || "—" }}</td>
-              <td>{{ row.break_start_fmt || "—" }}</td>
-              <td>{{ row.break_end_fmt || "—" }}</td>
-              <td>{{ row.time_out_fmt || "—" }}</td>
-              <td>{{ row.punctuality || "—" }}</td>
+              <td>{{ row.time_in_fmt || '—' }}</td>
+              <td>{{ row.lunch_start_fmt || '—' }}</td>
+              <td>{{ row.lunch_end_fmt || '—' }}</td>
+              <td>{{ row.break_start_fmt || '—' }}</td>
+              <td>{{ row.break_end_fmt || '—' }}</td>
+              <td>{{ row.time_out_fmt || '—' }}</td>
+              <td>{{ row.punctuality || '—' }}</td>
               <td>
-                <span class="chip" :class="statusChip(row.status)">{{ row.status }}</span>
+                <span class="chip" :class="statusChip(row.status)">
+                  {{ row.status }}
+                </span>
               </td>
             </tr>
             <tr v-if="displayRows.length === 0">
@@ -165,6 +161,7 @@ const attendance = ref([]);
 
 const nowTime = ref(dayjs().format("h:mm:ss A"));
 let _nowTimer;
+let _refreshTimer; // auto-refresh attendance every 60s
 
 const presentFilter = ref("all");
 const punctualityFilter = ref("all");
@@ -215,13 +212,9 @@ function normDayToken(token) {
   const short = t.slice(0, 3);
   return DAY_ALIASES[short] || "";
 }
-
-// Accepts: "Mon-Sat", "Mon–Sat", "Mon—Sat", "Mon to Sat", "Mon,Wed,Fri", etc.
 function parseWorkdaysNote(note) {
   if (!note || typeof note !== "string") return null;
   const days = new Set();
-
-  // Ranges (hyphen, en dash, em dash, "to")
   const rangeRe = new RegExp(
     "(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)\\s*(?:-|–|—|to)\\s*(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)",
     "gi"
@@ -240,23 +233,19 @@ function parseWorkdaysNote(note) {
     }
     return "";
   });
-
-  // Singles (comma, slash, ampersand)
   const singles = note.split(/[,/&]+/).map(t => t.trim()).filter(Boolean);
   for (const tok of singles) {
-    if (/(?:-|–|—|\bto\b)/i.test(tok)) continue; // already handled as range
+    if (/(?:-|–|—|\bto\b)/i.test(tok)) continue;
     const d = normDayToken(tok);
     if (DAY_ORDER.includes(d)) days.add(d);
   }
-
   return days.size ? days : null;
 }
-
 function isRestDayForDate(schedule, isoYmd) {
-  if (!schedule) return false; // don't auto-rest without schedule
+  if (!schedule) return false;
   const note = schedule.workdays_note ?? schedule.workdaysNote ?? "";
   const allowed = parseWorkdaysNote(note);
-  if (!allowed) return false; // invalid/missing note => not rest day
+  if (!allowed) return false;
   const dow = DAY_ORDER[dayjs(isoYmd).day()];
   return !allowed.has(dow);
 }
@@ -387,7 +376,26 @@ const notPresentToday = computed(() => {
     });
 });
 
-// --- Totals & display
+// --- KPI counts (only department affects these)
+const kpiSourceRows = computed(() => [...presentToday.value, ...notPresentToday.value]);
+const kpiFilteredRows = computed(() => {
+  if (!deptFilter.value) return kpiSourceRows.value;
+  return kpiSourceRows.value.filter(
+    r => (userById.value.get(r.user_id)?.user_department) === deptFilter.value
+  );
+});
+const kpiCounts = computed(() => {
+  const rows = kpiFilteredRows.value;
+  return {
+    present: rows.filter(r => r.status === "Present").length,
+    absent: rows.filter(r => r.status === "Absent").length,
+    restDay: rows.filter(r => r.status === "Rest Day").length,
+    onTime: rows.filter(r => r.status === "Present" && r.punctuality === "On Time").length,
+    late: rows.filter(r => r.status === "Present" && r.punctuality === "Late").length,
+  };
+});
+
+// --- Totals & display (unchanged)
 const absentTotal = computed(() => {
   const a1 = presentToday.value.filter((r) => r.status === "Absent").length;
   const a2 = notPresentToday.value.filter((r) => r.status === "Absent").length;
@@ -438,12 +446,8 @@ const displayRows = computed(() => {
   return rows;
 });
 
-// --- Data load & clock
-onMounted(async () => {
-  _nowTimer = setInterval(() => {
-    nowTime.value = dayjs().format("h:mm:ss A");
-  }, 1000);
-
+// --- Data load & auto-refresh (attendance only)
+async function loadAll() {
   const [u, d, s, a] = await Promise.all([
     fetchUsers(),
     fetchDepartments(),
@@ -454,85 +458,155 @@ onMounted(async () => {
   departments.value = d;
   schedules.value = s;
   attendance.value = a;
+}
+
+async function refreshAttendance() {
+  try {
+    attendance.value = await fetchAttendance();
+  } catch (e) {
+    // fail silently to avoid UX interruption
+  }
+}
+
+onMounted(async () => {
+  await loadAll();
+
+  _nowTimer = setInterval(() => {
+    nowTime.value = dayjs().format("h:mm:ss A");
+  }, 1000);
+
+  // Auto refresh attendance every 60s
+  _refreshTimer = setInterval(refreshAttendance, 60000);
 });
 
 onUnmounted(() => {
   if (_nowTimer) clearInterval(_nowTimer);
+  if (_refreshTimer) clearInterval(_refreshTimer);
 });
 </script>
 
 <style scoped>
-/* Layout / toolbar */
-.toolbar {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
-  gap: 12px;
-  align-items: end;
-}
-@media (min-width: 1024px) {
-  .toolbar {
-    grid-template-columns: 160px 160px 200px 1fr;
-    align-items: center;
-  }
-  .toolbar > div:last-child {
-    justify-self: end;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-}
-.now-badge {
+/* --- Header (title + big clock) --- */
+.header-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 }
-.now-badge .time {
-  font-weight: 700;
-  font-size: 14px;
-  line-height: 1;
-}
-.now-badge .date {
-  font-size: 12px;
-  color: #667085;
+.title {
+  font-size: 22px; /* bigger title */
+  font-weight: 800;
+  margin: 0;
 }
 
-/* KPI grid */
-.kpis {
-  display: grid;
-  gap: 16px;
-  margin-top: 12px;
+/* Big, readable clock to the right */
+.now-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
-@media (min-width: 1024px) {
-  .kpis {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-@media (max-width: 1023.98px) {
-  .kpis {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  }
-}
-.kpi {
-  background: linear-gradient(180deg, #f8fbff 0%, #f2f6ff 100%);
-  border: 1px solid #e6eefc;
-  border-radius: 14px;
-  padding: 14px 16px;
-  box-shadow: 0 2px 6px rgba(16, 24, 40, 0.04);
-}
-.kpi .label {
-  font-size: 13px;
-  color: #667085;
-  margin-bottom: 4px;
-}
-.kpi .value {
+.now-badge .time {
+  font-weight: 900;
   font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0.2px;
+  line-height: 1.1;
 }
-.kpi .delta {
-  font-size: 12px;
-  color: #667085;
+.now-badge .date {
+  font-size: 14px;
+  color: #4b5563;
   margin-top: 2px;
+}
+@media (min-width: 1280px) {
+  .now-badge .time { font-size: 32px; }
+  .now-badge .date { font-size: 16px; }
+}
+
+/* --- Toolbar grid --- */
+.toolbar {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.field label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+select,
+.search-input,
+input[type="text"],
+input[type="search"] {
+  width: 100%;
+  height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+  font-size: 14px;
+}
+.search-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Desktop: 3 compact filters + wide search */
+@media (min-width: 1200px) {
+  .toolbar { grid-template-columns: 200px 200px 220px 1fr; }
+}
+/* Tablet: two columns */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .toolbar { grid-template-columns: 1fr 1fr; }
+}
+/* Mobile: single column */
+@media (max-width: 767.98px) {
+  .toolbar { grid-template-columns: 1fr; }
+  .now-badge { align-items: stretch; }
+}
+
+/* ---------- KPI (jake-UI) ---------- */
+.kpi-grid{
+  display:grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap:12px;
+  margin-top:12px;
+}
+.kpi-card{
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  box-shadow:0 2px 5px rgba(17,24,39,0.04);
+}
+.kpi-label{
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.02em;
+  color:#6b7280;
+  text-transform:uppercase;
+}
+.kpi-value{
+  font-size:28px;
+  font-weight:800;
+  line-height:1;
+}
+@media (max-width: 1100px){
+  .kpi-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+@media (max-width: 720px){
+  .kpi-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 480px){
+  .kpi-grid{ grid-template-columns: 1fr; }
 }
 
 /* Table */
