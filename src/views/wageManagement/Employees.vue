@@ -1,9 +1,12 @@
 <template>
   <section class="row">
     <div class="card">
-      <h3 class="title" style="font-size:18px;margin-bottom:12px">Employees</h3>
+      <h3 class="title" style="font-size: 18px; margin-bottom: 12px">Employees</h3>
 
-      <div class="toolbar no-print" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+      <div
+        class="toolbar no-print"
+        style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end"
+      >
         <div>
           <label>Department</label>
           <select v-model.number="department">
@@ -17,7 +20,7 @@
             </option>
           </select>
         </div>
-        <div style="min-width:260px;flex:1">
+        <div style="min-width: 260px; flex: 1">
           <label>Search Employee</label>
           <input placeholder="Search by name or email" v-model="q" />
         </div>
@@ -31,7 +34,7 @@
             <tr>
               <th>Employee</th>
               <th>Department</th>
-              <th style="width:1%;">Actions</th>
+              <th style="width: 1%">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -39,17 +42,20 @@
               <td>
                 <div class="emp-cell">
                   <div class="emp-name">{{ u.user_fname }} {{ u.user_lname }}</div>
-                  <div class="emp-pos">{{ u.user_position || '—' }}</div>
+                  <div class="emp-pos">{{ u.user_position || "—" }}</div>
                 </div>
               </td>
               <td>{{ deptName(u.user_department) }}</td>
               <td>
-                <button class="primary" @click="$router.push({ name:'employee', params:{ id: u.user_id } })">
+                <button
+                  class="primary"
+                  @click="$router.push({ name: 'employee', params: { id: u.user_id } })"
+                >
                   View Attendance
                 </button>
               </td>
             </tr>
-            <tr v-if="filteredEmployees.length===0">
+            <tr v-if="filteredEmployees.length === 0">
               <td colspan="3">No employees found.</td>
             </tr>
           </tbody>
@@ -60,44 +66,48 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { fetchUsers, fetchDepartments } from '../services/api'
+import { ref, computed, onMounted } from "vue";
+import { fetchUsers, fetchDepartments } from "../../services/api";
 
-const users = ref([])
-const departments = ref([])
-const department = ref(0)
-const q = ref('')
+const users = ref([]);
+const departments = ref([]);
+const department = ref(0);
+const q = ref("");
 
 const deptMap = computed(() => {
-  const m = new Map()
-  for (const d of departments.value) m.set(d.department_id, d.department_name)
-  return m
-})
-const deptName = (id) => deptMap.value.get(id) || ''
+  const m = new Map();
+  for (const d of departments.value) m.set(d.department_id, d.department_name);
+  return m;
+});
+const deptName = (id) => deptMap.value.get(id) || "";
 
 const filteredEmployees = computed(() => {
-  let rows = [...users.value]
-  if (department.value) rows = rows.filter(u => u.user_department === department.value)
+  let rows = [...users.value];
+  if (department.value) rows = rows.filter((u) => u.user_department === department.value);
   if (q.value) {
-    const needle = q.value.toLowerCase()
-    rows = rows.filter(u =>
-      (`${u.user_fname} ${u.user_lname}`.toLowerCase().includes(needle) ||
-       String(u.user_id).includes(needle) ||
-       (u.user_email || '').toLowerCase().includes(needle))
-    )
+    const needle = q.value.toLowerCase();
+    rows = rows.filter(
+      (u) =>
+        `${u.user_fname} ${u.user_lname}`.toLowerCase().includes(needle) ||
+        String(u.user_id).includes(needle) ||
+        (u.user_email || "").toLowerCase().includes(needle)
+    );
   }
-  return rows
-})
+  return rows;
+});
 
 onMounted(async () => {
-  const [u, d] = await Promise.all([fetchUsers(), fetchDepartments()])
-  users.value = u
-  departments.value = d
-})
+  const [u, d] = await Promise.all([fetchUsers(), fetchDepartments()]);
+  users.value = u;
+  departments.value = d;
+});
 </script>
 
 <style scoped>
-.table-wrap table { width: 100%; border-collapse: collapse; }
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
 .table-wrap thead th {
   text-align: left;
   padding: 10px 12px;
@@ -113,9 +123,17 @@ onMounted(async () => {
   vertical-align: top;
   font-size: 14px;
 }
-.emp-cell { line-height: 1.2; }
-.emp-name { font-weight: 700; }
-.emp-pos { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.emp-cell {
+  line-height: 1.2;
+}
+.emp-name {
+  font-weight: 700;
+}
+.emp-pos {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
 .primary {
   padding: 8px 12px;
   background: #111827;
@@ -125,5 +143,7 @@ onMounted(async () => {
   cursor: pointer;
   font-weight: 600;
 }
-.primary:hover { filter: brightness(1.05); }
+.primary:hover {
+  filter: brightness(1.05);
+}
 </style>

@@ -102,24 +102,21 @@
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="row in displayRows"
-              :key="row.key"
-            >
+            <tr v-for="row in displayRows" :key="row.key">
               <td>
                 <div class="emp">
                   <div class="name">{{ row.empName }}</div>
                   <div class="dept">{{ row.deptName }}</div>
                 </div>
               </td>
-              <td>{{ row.schedule_fmt || '—' }}</td>
-              <td>{{ row.time_in_fmt || '—' }}</td>
-              <td>{{ row.lunch_start_fmt || '—' }}</td>
-              <td>{{ row.lunch_end_fmt || '—' }}</td>
-              <td>{{ row.break_start_fmt || '—' }}</td>
-              <td>{{ row.break_end_fmt || '—' }}</td>
-              <td>{{ row.time_out_fmt || '—' }}</td>
-              <td>{{ row.punctuality || '—' }}</td>
+              <td>{{ row.schedule_fmt || "—" }}</td>
+              <td>{{ row.time_in_fmt || "—" }}</td>
+              <td>{{ row.lunch_start_fmt || "—" }}</td>
+              <td>{{ row.lunch_end_fmt || "—" }}</td>
+              <td>{{ row.break_start_fmt || "—" }}</td>
+              <td>{{ row.break_end_fmt || "—" }}</td>
+              <td>{{ row.time_out_fmt || "—" }}</td>
+              <td>{{ row.punctuality || "—" }}</td>
               <td>
                 <span class="chip" :class="statusChip(row.status)">
                   {{ row.status }}
@@ -146,8 +143,8 @@ import {
   fetchAttendance,
   fetchOnCallList,
   fetchOnCallSchedules,
-} from "../services/api";
-import { fmtTime, computeStatus } from "../utils/time";
+} from "../../services/api";
+import { fmtTime, computeStatus } from "../../utils/time";
 
 const users = ref([]);
 const departments = ref([]);
@@ -172,7 +169,7 @@ function statusChip(s) {
   if (s === "Present") return "success";
   if (s === "Not Present") return "warn";
   if (s === "Absent") return "danger";
-  if (s === "Rest Day") return "info";      // neutral gray
+  if (s === "Rest Day") return "info"; // neutral gray
   if (s === "On Call") return "oncall";
   return "";
 }
@@ -180,12 +177,16 @@ function statusChip(s) {
 // Pretty schedule helpers
 function prettyHM(hms) {
   if (!hms) return "";
-  try { return dayjs(`2000-01-01T${hms}`).format("h:mma"); } catch { return hms; }
+  try {
+    return dayjs(`2000-01-01T${hms}`).format("h:mma");
+  } catch {
+    return hms;
+  }
 }
 function schedulePretty(sched) {
   if (!sched) return "";
   const start = sched.work_start || sched.start_time || sched.time_in;
-  const end   = sched.work_end   || sched.end_time   || sched.time_out;
+  const end = sched.work_end || sched.end_time || sched.time_out;
   if (!start || !end) return "";
   return `${prettyHM(start)} - ${prettyHM(end)}`;
 }
@@ -229,13 +230,23 @@ const onCallScheduleById = computed(() => {
 /* --- Rest Day helpers (dept schedule only) --- */
 const DAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_ALIASES = {
-  sunday: "Sun", sun: "Sun",
-  monday: "Mon", mon: "Mon",
-  tuesday: "Tue", tue: "Tue", tues: "Tue",
-  wednesday: "Wed", wed: "Wed",
-  thursday: "Thu", thu: "Thu", thur: "Thu", thurs: "Thu",
-  friday: "Fri", fri: "Fri",
-  saturday: "Sat", sat: "Sat",
+  sunday: "Sun",
+  sun: "Sun",
+  monday: "Mon",
+  mon: "Mon",
+  tuesday: "Tue",
+  tue: "Tue",
+  tues: "Tue",
+  wednesday: "Wed",
+  wed: "Wed",
+  thursday: "Thu",
+  thu: "Thu",
+  thur: "Thu",
+  thurs: "Thu",
+  friday: "Fri",
+  fri: "Fri",
+  saturday: "Sat",
+  sat: "Sat",
 };
 function normDayToken(token) {
   if (!token) return "";
@@ -252,7 +263,8 @@ function parseWorkdaysNote(note) {
     "gi"
   );
   note.replace(rangeRe, (_, a, b) => {
-    const A = normDayToken(a), B = normDayToken(b);
+    const A = normDayToken(a),
+      B = normDayToken(b);
     if (!A || !B) return "";
     const ai = DAY_ORDER.indexOf(A);
     const bi = DAY_ORDER.indexOf(B);
@@ -265,7 +277,10 @@ function parseWorkdaysNote(note) {
     }
     return "";
   });
-  const singles = note.split(/[,/&]+/).map(t => t.trim()).filter(Boolean);
+  const singles = note
+    .split(/[,/&]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
   for (const tok of singles) {
     if (/(?:-|–|—|\bto\b)/i.test(tok)) continue;
     const d = normDayToken(tok);
@@ -301,7 +316,9 @@ function getEffectiveScheduleForToday(userId) {
     const ocSched = onCallScheduleById.value.get(Number(schedId));
     if (!ocSched) continue;
 
-    const startStr = String(ocSched.schedule_date ?? ocSched.date ?? ocSched.scheduleDate ?? "");
+    const startStr = String(
+      ocSched.schedule_date ?? ocSched.date ?? ocSched.scheduleDate ?? ""
+    );
     if (!startStr) continue;
 
     const start = dayjs(startStr, "YYYY-MM-DD");
@@ -311,8 +328,10 @@ function getEffectiveScheduleForToday(userId) {
     const end = start.add(Math.max(1, spanDays) - 1, "day"); // inclusive end
 
     const today = dayjs(todayYMD.value, "YYYY-MM-DD");
-    if ((today.isAfter(start, "day") || today.isSame(start, "day")) &&
-        (today.isBefore(end, "day") || today.isSame(end, "day"))) {
+    if (
+      (today.isAfter(start, "day") || today.isSame(start, "day")) &&
+      (today.isBefore(end, "day") || today.isSame(end, "day"))
+    ) {
       // today falls within the on-call window
       return { sched: ocSched, source: "oncall" };
     }
@@ -352,8 +371,9 @@ const presentToday = computed(() => {
       };
     }
 
-    const expectedStart = effectiveSched.work_start || effectiveSched.start_time || "09:00:00";
-    const expectedEnd   = effectiveSched.work_end   || effectiveSched.end_time   || "18:00:00";
+    const expectedStart =
+      effectiveSched.work_start || effectiveSched.start_time || "09:00:00";
+    const expectedEnd = effectiveSched.work_end || effectiveSched.end_time || "18:00:00";
 
     const stat = computeStatus({
       time_in: r.time_in,
@@ -470,17 +490,18 @@ const kpiSourceRows = computed(() => [...presentToday.value, ...notPresentToday.
 const kpiFilteredRows = computed(() => {
   if (!deptFilter.value) return kpiSourceRows.value;
   return kpiSourceRows.value.filter(
-    r => (userById.value.get(r.user_id)?.user_department) === deptFilter.value
+    (r) => userById.value.get(r.user_id)?.user_department === deptFilter.value
   );
 });
 const kpiCounts = computed(() => {
   const rows = kpiFilteredRows.value;
   return {
-    present: rows.filter(r => r.status === "Present").length,
-    absent: rows.filter(r => r.status === "Absent").length,
-    restDay: rows.filter(r => r.status === "Rest Day").length,
-    onTime: rows.filter(r => r.status === "Present" && r.punctuality === "On Time").length,
-    late: rows.filter(r => r.status === "Present" && r.punctuality === "Late").length,
+    present: rows.filter((r) => r.status === "Present").length,
+    absent: rows.filter((r) => r.status === "Absent").length,
+    restDay: rows.filter((r) => r.status === "Rest Day").length,
+    onTime: rows.filter((r) => r.status === "Present" && r.punctuality === "On Time")
+      .length,
+    late: rows.filter((r) => r.status === "Present" && r.punctuality === "Late").length,
   };
 });
 
@@ -601,7 +622,7 @@ onUnmounted(() => {
   border-radius: 12px;
   background: #f3f4f6;
   border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 .now-badge .time {
   font-weight: 900;
@@ -614,8 +635,12 @@ onUnmounted(() => {
   margin-top: 2px;
 }
 @media (min-width: 1280px) {
-  .now-badge .time { font-size: 32px; }
-  .now-badge .date { font-size: 16px; }
+  .now-badge .time {
+    font-size: 32px;
+  }
+  .now-badge .date {
+    font-size: 16px;
+  }
 }
 
 /* --- Toolbar grid --- */
@@ -648,59 +673,79 @@ input[type="search"] {
   gap: 10px;
 }
 @media (min-width: 1200px) {
-  .toolbar { grid-template-columns: 200px 200px 220px 1fr; }
+  .toolbar {
+    grid-template-columns: 200px 200px 220px 1fr;
+  }
 }
 @media (min-width: 768px) and (max-width: 1199.98px) {
-  .toolbar { grid-template-columns: 1fr 1fr; }
+  .toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 @media (max-width: 767.98px) {
-  .toolbar { grid-template-columns: 1fr; }
-  .now-badge { align-items: stretch; }
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+  .now-badge {
+    align-items: stretch;
+  }
 }
 
 /* ---------- KPI (jake-UI) ---------- */
-.kpi-grid{
-  display:grid;
-  grid-template-columns: repeat(5, minmax(0,1fr));
-  gap:12px;
-  margin-top:12px;
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
 }
-.kpi-card{
-  background:#fff;
-  border:1px solid #e5e7eb;
-  border-radius:14px;
-  padding:16px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:6px;
-  box-shadow:0 2px 5px rgba(17,24,39,0.04);
+.kpi-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 5px rgba(17, 24, 39, 0.04);
 }
-.kpi-label{
-  font-size:12px;
-  font-weight:700;
-  letter-spacing:.02em;
-  color:#6b7280;
-  text-transform:uppercase;
+.kpi-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #6b7280;
+  text-transform: uppercase;
 }
-.kpi-value{
-  font-size:28px;
-  font-weight:800;
-  line-height:1;
+.kpi-value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
 }
-@media (max-width: 1100px){
-  .kpi-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width: 1100px) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
-@media (max-width: 720px){
-  .kpi-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+@media (max-width: 720px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-@media (max-width: 480px){
-  .kpi-grid{ grid-template-columns: 1fr; }
+@media (max-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Table */
-.table-wrap { margin-top: 10px; }
-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.table-wrap {
+  margin-top: 10px;
+}
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
 thead th {
   text-align: left;
   font-size: 12px;
@@ -715,7 +760,9 @@ tbody td {
   border-bottom: 1px solid #f0f2f5;
   font-size: 14px;
 }
-tbody tr:hover { background: #fafcff; }
+tbody tr:hover {
+  background: #fafcff;
+}
 
 /* Status chips */
 .chip {
@@ -726,17 +773,39 @@ tbody tr:hover { background: #fafcff; }
   font-weight: 600;
 }
 /* Present */
-.chip.success { background: #ecfdf3; color: #027a48; }
+.chip.success {
+  background: #ecfdf3;
+  color: #027a48;
+}
 /* Not Present */
-.chip.warn    { background: #fff6ed; color: #b54708; }
+.chip.warn {
+  background: #fff6ed;
+  color: #b54708;
+}
 /* Absent */
-.chip.danger  { background: #fef3f2; color: #b42318; }
+.chip.danger {
+  background: #fef3f2;
+  color: #b42318;
+}
 /* Rest Day — neutral gray (per your request) */
-.chip.info    { background: #f3f4f6; color: #374151; }
+.chip.info {
+  background: #f3f4f6;
+  color: #374151;
+}
 /* On Call */
-.chip.oncall  { background: #e0f2fe; color: #075985; }
+.chip.oncall {
+  background: #e0f2fe;
+  color: #075985;
+}
 
 /* Employee cell */
-.emp .name { font-weight: 600; line-height: 1.2; }
-.emp .dept { font-size: 12px; color: #667085; line-height: 1.2; }
+.emp .name {
+  font-weight: 600;
+  line-height: 1.2;
+}
+.emp .dept {
+  font-size: 12px;
+  color: #667085;
+  line-height: 1.2;
+}
 </style>

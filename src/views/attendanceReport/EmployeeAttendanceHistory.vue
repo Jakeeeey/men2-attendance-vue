@@ -7,7 +7,7 @@
         <div class="left">
           <button
             class="btn btn-ghost no-print"
-            @click="$router.push({ name: 'employees' })"
+            @click="$router.push({ name: 'employee-reports' })"
           >
             ← Back
           </button>
@@ -196,14 +196,14 @@ import {
   /* NEW: on-call data sources */
   fetchOnCallList,
   fetchOnCallSchedules,
-} from "../services/api";
+} from "../../services/api";
 import {
   fmtTime,
   minutesToHHMM,
   minutesPrettyWithTotal,
   computeStatus,
   displayTimeOutWhenMissing,
-} from "../utils/time";
+} from "../../utils/time";
 
 /* ---------- Filters & helpers ---------- */
 const statusFilter = ref("All");

@@ -241,8 +241,8 @@ import {
   fetchAttendance,
   fetchOnCallList,
   fetchOnCallSchedules,
-} from "../services/api";
-import { computeStatus } from "../utils/time";
+} from "../../services/api";
+import { computeStatus } from "../../utils/time";
 
 /* ------------ State ------------ */
 const users = ref([]);

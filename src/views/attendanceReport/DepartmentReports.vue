@@ -190,8 +190,8 @@ import {
   fetchAttendance,
   fetchOnCallList,
   fetchOnCallSchedules,
-} from "../services/api";
-import { computeStatus, minutesToHHMM } from "../utils/time";
+} from "../../services/api";
+import { computeStatus, minutesToHHMM } from "../../utils/time";
 
 const users = ref([]);
 const departments = ref([]);
