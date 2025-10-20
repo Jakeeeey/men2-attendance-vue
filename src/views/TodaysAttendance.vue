@@ -14,7 +14,7 @@
       <!-- Toolbar -->
       <div class="toolbar no-print">
         <div class="field">
-          <label>Filter</label>
+          <label>Status</label>
           <select v-model="presentFilter">
             <option value="all">All</option>
             <option value="present">Present</option>
@@ -90,6 +90,7 @@
           <thead>
             <tr>
               <th>Employee</th>
+              <th>Schedule</th>
               <th>Time In</th>
               <th>Lunch Start</th>
               <th>Lunch End</th>
@@ -104,15 +105,6 @@
             <tr
               v-for="row in displayRows"
               :key="row.key"
-              :style="row.user_id ? 'cursor:pointer' : ''"
-              @click="
-                row.user_id
-                  ? $router.push({
-                      name: 'employee-report',
-                      query: { user_id: row.user_id },
-                    })
-                  : null
-              "
             >
               <td>
                 <div class="emp">
@@ -120,6 +112,7 @@
                   <div class="dept">{{ row.deptName }}</div>
                 </div>
               </td>
+              <td>{{ row.schedule_fmt || '—' }}</td>
               <td>{{ row.time_in_fmt || '—' }}</td>
               <td>{{ row.lunch_start_fmt || '—' }}</td>
               <td>{{ row.lunch_end_fmt || '—' }}</td>
@@ -134,7 +127,7 @@
               </td>
             </tr>
             <tr v-if="displayRows.length === 0">
-              <td colspan="9">No employees match the selected filters.</td>
+              <td colspan="10">No employees match the selected filters.</td>
             </tr>
           </tbody>
         </table>
@@ -151,6 +144,8 @@ import {
   fetchDepartments,
   fetchSchedules,
   fetchAttendance,
+  fetchOnCallList,
+  fetchOnCallSchedules,
 } from "../services/api";
 import { fmtTime, computeStatus } from "../utils/time";
 
@@ -158,6 +153,10 @@ const users = ref([]);
 const departments = ref([]);
 const schedules = ref([]);
 const attendance = ref([]);
+
+/* --- NEW: on-call datasets --- */
+const onCallList = ref([]);
+const onCallSchedules = ref([]);
 
 const nowTime = ref(dayjs().format("h:mm:ss A"));
 let _nowTimer;
@@ -173,8 +172,22 @@ function statusChip(s) {
   if (s === "Present") return "success";
   if (s === "Not Present") return "warn";
   if (s === "Absent") return "danger";
-  if (s === "Rest Day") return "info";
+  if (s === "Rest Day") return "info";      // neutral gray
+  if (s === "On Call") return "oncall";
   return "";
+}
+
+// Pretty schedule helpers
+function prettyHM(hms) {
+  if (!hms) return "";
+  try { return dayjs(`2000-01-01T${hms}`).format("h:mma"); } catch { return hms; }
+}
+function schedulePretty(sched) {
+  if (!sched) return "";
+  const start = sched.work_start || sched.start_time || sched.time_in;
+  const end   = sched.work_end   || sched.end_time   || sched.time_out;
+  if (!start || !end) return "";
+  return `${prettyHM(start)} - ${prettyHM(end)}`;
 }
 
 // --- Indexers
@@ -194,7 +207,26 @@ const scheduleByDeptId = computed(() => {
   return map;
 });
 
-// --- Rest Day helpers (robust parsing of workdays_note)
+/* --- NEW: on-call lookups --- */
+/* Allow multiple on-call rows per user; store arrays */
+const onCallRowsByUserId = computed(() => {
+  const m = new Map();
+  for (const row of onCallList.value) {
+    const uid = row.user_id ?? row.user ?? row.employee_id;
+    if (uid == null) continue;
+    const key = Number(uid);
+    if (!m.has(key)) m.set(key, []);
+    m.get(key).push(row);
+  }
+  return m;
+});
+const onCallScheduleById = computed(() => {
+  const m = new Map();
+  for (const s of onCallSchedules.value) m.set(s.id, s);
+  return m;
+});
+
+/* --- Rest Day helpers (dept schedule only) --- */
 const DAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_ALIASES = {
   sunday: "Sun", sun: "Sun",
@@ -251,12 +283,43 @@ function isRestDayForDate(schedule, isoYmd) {
 }
 
 // --- Today helpers
-const todayStr = computed(() => dayjs().format("MMM D, YYYY"));
+const todayStr = computed(() => dayjs().format("dddd - MMM D, YYYY"));
 const todayYMD = computed(() => dayjs().format("YYYY-MM-DD"));
 
 const todayRows = computed(() =>
   attendance.value.filter((a) => a.log_date === todayYMD.value)
 );
+
+/* --- NEW: effective schedule for TODAY (on-call with working_days span) --- */
+function getEffectiveScheduleForToday(userId) {
+  const rows = onCallRowsByUserId.value.get(Number(userId)) || [];
+  if (!rows.length) return { sched: null, source: "none" };
+
+  for (const oc of rows) {
+    const schedId = oc.dept_sched_id ?? oc.dept_schedule_id ?? oc.schedule_id;
+    if (schedId == null) continue;
+    const ocSched = onCallScheduleById.value.get(Number(schedId));
+    if (!ocSched) continue;
+
+    const startStr = String(ocSched.schedule_date ?? ocSched.date ?? ocSched.scheduleDate ?? "");
+    if (!startStr) continue;
+
+    const start = dayjs(startStr, "YYYY-MM-DD");
+    if (!start.isValid()) continue;
+
+    const spanDays = Number(ocSched.working_days ?? ocSched.workingDays ?? 1);
+    const end = start.add(Math.max(1, spanDays) - 1, "day"); // inclusive end
+
+    const today = dayjs(todayYMD.value, "YYYY-MM-DD");
+    if ((today.isAfter(start, "day") || today.isSame(start, "day")) &&
+        (today.isBefore(end, "day") || today.isSame(end, "day"))) {
+      // today falls within the on-call window
+      return { sched: ocSched, source: "oncall" };
+    }
+  }
+
+  return { sched: null, source: "none" };
+}
 
 // --- Build rows (present)
 const presentToday = computed(() => {
@@ -264,15 +327,20 @@ const presentToday = computed(() => {
     const user = userById.value.get(r.user_id) || {};
     const deptId = user.user_department || r.department_id || 0;
     const dept = departmentById.value.get(deptId) || {};
-    const sched = scheduleByDeptId.value.get(deptId) || {};
 
-    // Rest Day override for present list (edge case)
-    if (isRestDayForDate(sched, todayYMD.value)) {
+    // Effective schedule for TODAY
+    const { sched: ocSched, source } = getEffectiveScheduleForToday(r.user_id);
+    const deptSched = scheduleByDeptId.value.get(deptId) || {};
+    const effectiveSched = source === "oncall" ? ocSched : deptSched;
+
+    // Rest Day logic applies ONLY to department schedule (not when on-call overrides)
+    if (source !== "oncall" && isRestDayForDate(deptSched, todayYMD.value)) {
       return {
         key: String(r.log_id),
         user_id: r.user_id,
         empName: `${user.user_fname || ""} ${user.user_lname || ""}`.trim(),
         deptName: dept.department_name || "",
+        schedule_fmt: schedulePretty(deptSched),
         time_in_fmt: "",
         lunch_start_fmt: "",
         lunch_end_fmt: "",
@@ -284,18 +352,25 @@ const presentToday = computed(() => {
       };
     }
 
+    const expectedStart = effectiveSched.work_start || effectiveSched.start_time || "09:00:00";
+    const expectedEnd   = effectiveSched.work_end   || effectiveSched.end_time   || "18:00:00";
+
     const stat = computeStatus({
       time_in: r.time_in,
       time_out: r.time_out,
-      expectedStart: sched.work_start || "09:00:00",
-      expectedEnd: sched.work_end || "18:00:00",
+      expectedStart,
+      expectedEnd,
     });
+
+    const baseStatus = r.time_in ? "Present" : "Absent";
+    const finalStatus = source === "oncall" ? "On Call" : baseStatus;
 
     return {
       key: `p-${r.user_id}`,
       user_id: r.user_id,
       empName: `${user.user_fname || ""} ${user.user_lname || ""}`.trim(),
       deptName: dept.department_name || "",
+      schedule_fmt: schedulePretty(effectiveSched),
       time_in_fmt: fmtTime(r.time_in),
       lunch_start_fmt: fmtTime(r.lunch_start),
       lunch_end_fmt: fmtTime(r.lunch_end),
@@ -303,7 +378,7 @@ const presentToday = computed(() => {
       break_end_fmt: fmtTime(r.break_end),
       time_out_fmt: fmtTime(r.time_out),
       punctuality: r.time_in ? (stat.lateMinutes > 0 ? "Late" : "On Time") : "—",
-      status: r.time_in ? "Present" : "Absent",
+      status: finalStatus,
     };
   });
 });
@@ -316,15 +391,20 @@ const notPresentToday = computed(() => {
     .filter((u) => !presentSet.has(u.user_id))
     .map((u) => {
       const dept = departmentById.value.get(u.user_department) || {};
-      const sched = scheduleByDeptId.value.get(u.user_department) || {};
 
-      // Rest Day takes precedence
-      if (isRestDayForDate(sched, todayYMD.value)) {
+      // Effective schedule for TODAY
+      const { sched: ocSched, source } = getEffectiveScheduleForToday(u.user_id);
+      const deptSched = scheduleByDeptId.value.get(u.user_department) || {};
+      const effectiveSched = source === "oncall" ? ocSched : deptSched;
+
+      // If on-call is active today, it's a working day; do NOT mark as Rest Day
+      if (source !== "oncall" && isRestDayForDate(deptSched, todayYMD.value)) {
         return {
           key: `np-${u.user_id}`,
           user_id: u.user_id,
           empName: `${u.user_fname || ""} ${u.user_lname || ""}`.trim(),
           deptName: dept.department_name || "",
+          schedule_fmt: schedulePretty(deptSched),
           time_in_fmt: "",
           lunch_start_fmt: "",
           lunch_end_fmt: "",
@@ -336,17 +416,24 @@ const notPresentToday = computed(() => {
         };
       }
 
-      // Not Present vs Absent → based on lunch_end
-      const lunchEnd = sched.lunch_end; // 'HH:mm:ss' per API
+      // Not Present vs Absent → based on lunch_end (from effective schedule)
+      const lunchEnd =
+        effectiveSched.lunch_end ||
+        effectiveSched.lunchEnd ||
+        effectiveSched.lunch_end_time;
+
       if (lunchEnd) {
         const cutoff = dayjs(`${todayYMD.value}T${lunchEnd}`);
         const now = dayjs();
-        const status = now.isAfter(cutoff) ? "Absent" : "Not Present";
+        const baseStatus = now.isAfter(cutoff) ? "Absent" : "Not Present";
+        const finalStatus = source === "oncall" ? "On Call" : baseStatus;
+
         return {
           key: `np-${u.user_id}`,
           user_id: u.user_id,
           empName: `${u.user_fname || ""} ${u.user_lname || ""}`.trim(),
           deptName: dept.department_name || "",
+          schedule_fmt: schedulePretty(effectiveSched),
           time_in_fmt: "",
           lunch_start_fmt: "",
           lunch_end_fmt: "",
@@ -354,16 +441,18 @@ const notPresentToday = computed(() => {
           break_end_fmt: "",
           time_out_fmt: "",
           punctuality: "—",
-          status,
+          status: finalStatus,
         };
       }
 
-      // Fallback (no lunch_end provided): keep as Not Present
+      // Fallback (no lunch_end provided)
+      const finalStatus = source === "oncall" ? "On Call" : "Not Present";
       return {
         key: `np-${u.user_id}`,
         user_id: u.user_id,
         empName: `${u.user_fname || ""} ${u.user_lname || ""}`.trim(),
         deptName: dept.department_name || "",
+        schedule_fmt: schedulePretty(effectiveSched),
         time_in_fmt: "",
         lunch_start_fmt: "",
         lunch_end_fmt: "",
@@ -371,7 +460,7 @@ const notPresentToday = computed(() => {
         break_end_fmt: "",
         time_out_fmt: "",
         punctuality: "—",
-        status: "Not Present",
+        status: finalStatus,
       };
     });
 });
@@ -412,7 +501,7 @@ const displayRows = computed(() => {
       ...notPresentToday.value.filter((r) => r.status === "Absent"),
     ];
   } else if (presentFilter.value === "not_present") {
-    rows = notPresentToday.value.filter((r) => r.status === "Not Present"); // only "Not Present"
+    rows = notPresentToday.value.filter((r) => r.status === "Not Present");
   } else if (presentFilter.value === "rest_day") {
     rows = [
       ...presentToday.value.filter((r) => r.status === "Rest Day"),
@@ -448,16 +537,20 @@ const displayRows = computed(() => {
 
 // --- Data load & auto-refresh (attendance only)
 async function loadAll() {
-  const [u, d, s, a] = await Promise.all([
+  const [u, d, s, a, ocList, ocScheds] = await Promise.all([
     fetchUsers(),
     fetchDepartments(),
     fetchSchedules(),
     fetchAttendance(),
+    fetchOnCallList(),
+    fetchOnCallSchedules(),
   ]);
   users.value = u;
   departments.value = d;
   schedules.value = s;
   attendance.value = a;
+  onCallList.value = ocList;
+  onCallSchedules.value = ocScheds;
 }
 
 async function refreshAttendance() {
@@ -475,7 +568,6 @@ onMounted(async () => {
     nowTime.value = dayjs().format("h:mm:ss A");
   }, 1000);
 
-  // Auto refresh attendance every 60s
   _refreshTimer = setInterval(refreshAttendance, 60000);
 });
 
@@ -495,7 +587,7 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 .title {
-  font-size: 22px; /* bigger title */
+  font-size: 22px;
   font-weight: 800;
   margin: 0;
 }
@@ -555,15 +647,12 @@ input[type="search"] {
   align-items: center;
   gap: 10px;
 }
-/* Desktop: 3 compact filters + wide search */
 @media (min-width: 1200px) {
   .toolbar { grid-template-columns: 200px 200px 220px 1fr; }
 }
-/* Tablet: two columns */
 @media (min-width: 768px) and (max-width: 1199.98px) {
   .toolbar { grid-template-columns: 1fr 1fr; }
 }
-/* Mobile: single column */
 @media (max-width: 767.98px) {
   .toolbar { grid-template-columns: 1fr; }
   .now-badge { align-items: stretch; }
@@ -636,10 +725,16 @@ tbody tr:hover { background: #fafcff; }
   font-size: 12px;
   font-weight: 600;
 }
+/* Present */
 .chip.success { background: #ecfdf3; color: #027a48; }
+/* Not Present */
 .chip.warn    { background: #fff6ed; color: #b54708; }
+/* Absent */
 .chip.danger  { background: #fef3f2; color: #b42318; }
-.chip.info    { background: #eef4ff; color: #3538cd; }
+/* Rest Day — neutral gray (per your request) */
+.chip.info    { background: #f3f4f6; color: #374151; }
+/* On Call */
+.chip.oncall  { background: #e0f2fe; color: #075985; }
 
 /* Employee cell */
 .emp .name { font-weight: 600; line-height: 1.2; }

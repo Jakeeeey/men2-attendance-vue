@@ -13,8 +13,17 @@
           </div>
 
           <button class="btn btn-print no-print" @click="printDetails">
-            <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-              <path d="M6 9V2h12v7h1a3 3 0 0 1 3 3v5h-4v4H6v-4H2v-5a3 3 0 0 1 3-3h1Zm2-7h8v7H8V2Zm8 18H8v2h8v-2ZM4 12v3h16v-3a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1Zm3-7h8v2H7V5Z"/>
+            <svg
+              class="btn-icon"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 9V2h12v7h1a3 3 0 0 1 3 3v5h-4v4H6v-4H2v-5a3 3 0 0 1 3-3h1Zm2-7h8v7H8V2Zm8 18H8v2h8v-2ZM4 12v3h16v-3a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1Zm3-7h8v2H7V5Z"
+              />
             </svg>
             <span>Print</span>
           </button>
@@ -38,12 +47,7 @@
 
         <div class="field">
           <label>Date From</label>
-          <input
-            type="date"
-            v-model="startDate"
-            :min="minStartStr"
-            :max="yesterdayStr"
-          />
+          <input type="date" v-model="startDate" :min="minStartStr" :max="yesterdayStr" />
         </div>
 
         <div class="field">
@@ -86,12 +90,7 @@
         </div>
 
         <div v-if="consistentNames.length" class="chips">
-          <span
-            v-for="n in consistentNames"
-            :key="n"
-            class="chip-pill"
-            >{{ n }}</span
-          >
+          <span v-for="n in consistentNames" :key="n" class="chip-pill">{{ n }}</span>
         </div>
         <div v-else class="muted">None</div>
       </div>
@@ -102,12 +101,13 @@
       <div class="table-wrap" ref="printRef">
         <template v-for="group in groups" :key="group.ymd">
           <h4 class="day-heading">
-            {{ dayjs(group.ymd).format('MMM D, YYYY') }}
+            {{ dayjs(group.ymd).format("MMM D, YYYY") }}
           </h4>
           <table class="table">
             <thead>
               <tr>
                 <th class="col-name">Name</th>
+                <th>Work Hours</th>
                 <th>Overtime</th>
                 <th>Late</th>
                 <th>Punctuality</th>
@@ -118,30 +118,59 @@
               <tr
                 v-for="r in group.rows"
                 :key="r.key"
-                :class="{'row-consistent': r.consistentlyOnTime}"
+                :class="{ 'row-consistent': r.consistentlyOnTime }"
               >
                 <td class="col-name">
-                  <div class="emp-name">{{ r.empName || r.name || r.employee_name || '-' }}</div>
+                  <div class="emp-name">
+                    {{ r.empName || r.name || r.employee_name || "-" }}
+                  </div>
                 </td>
-                <td class="mono">{{ typeof r.overtimeMinutes === 'number' ? minutesToHHMM(r.overtimeMinutes) : '-' }}</td>
-                <td class="mono">{{ typeof r.lateMinutes === 'number' ? minutesToHHMM(r.lateMinutes) : '-' }}</td>
+                <td class="mono">
+                  {{
+                    typeof r.workMinutes === "number" ? minutesToHHMM(r.workMinutes) : "-"
+                  }}
+                </td>
+                <td class="mono">
+                  {{
+                    typeof r.overtimeMinutes === "number"
+                      ? minutesToHHMM(r.overtimeMinutes)
+                      : "-"
+                  }}
+                </td>
+                <td class="mono">
+                  {{
+                    typeof r.lateMinutes === "number" ? minutesToHHMM(r.lateMinutes) : "-"
+                  }}
+                </td>
                 <td>
                   <span
                     class="chip"
-                    :class="r.punctuality === 'On Time' ? 'chip-ok' : (r.punctuality === 'Late' ? 'chip-warn' : 'chip-muted')"
+                    :class="
+                      r.punctuality === 'On Time'
+                        ? 'chip-ok'
+                        : r.punctuality === 'Late'
+                        ? 'chip-warn'
+                        : 'chip-muted'
+                    "
                     >{{ r.punctuality }}</span
                   >
                 </td>
                 <td>
                   <span
                     class="chip"
-                    :class="computeRowStatus(r) === 'Present' ? 'chip-ok' : (computeRowStatus(r) === 'Absent' ? 'chip-danger' : 'chip-muted')"
+                    :class="
+                      computeRowStatus(r) === 'Present'
+                        ? 'chip-ok'
+                        : computeRowStatus(r) === 'Absent'
+                        ? 'chip-danger'
+                        : 'chip-muted'
+                    "
                     >{{ computeRowStatus(r) }}</span
                   >
                 </td>
               </tr>
-              <tr v-if="group.rows.length===0">
-                <td colspan="5" class="muted center">No records.</td>
+              <tr v-if="group.rows.length === 0">
+                <td colspan="6" class="muted center">No records.</td>
               </tr>
             </tbody>
           </table>
@@ -152,311 +181,464 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import dayjs from 'dayjs'
-import { fetchUsers, fetchDepartments, fetchSchedules, fetchAttendance } from '../services/api'
-import { computeStatus, minutesToHHMM } from '../utils/time'
+import { ref, computed, onMounted, watch } from "vue";
+import dayjs from "dayjs";
+import {
+  fetchUsers,
+  fetchDepartments,
+  fetchSchedules,
+  fetchAttendance,
+  fetchOnCallList,
+  fetchOnCallSchedules,
+} from "../services/api";
+import { computeStatus, minutesToHHMM } from "../utils/time";
 
-const users = ref([])
-const departments = ref([])
-const schedules = ref([])
-const attendance = ref([])
+const users = ref([]);
+const departments = ref([]);
+const schedules = ref([]);
+const attendance = ref([]);
 
-const deptId = ref(0)
+/* --- jake-oncall datasets --- */
+const onCallList = ref([]);
+const onCallSchedules = ref([]);
+
+const deptId = ref(0);
 
 /* Date constraints */
-const minStartStr = computed(() => dayjs('2025-10-10').format('YYYY-MM-DD'))
-const yesterdayStr = computed(() => dayjs().subtract(1, 'day').format('YYYY-MM-DD'))
+const minStartStr = computed(() => dayjs("2025-10-10").format("YYYY-MM-DD"));
+const yesterdayStr = computed(() => dayjs().subtract(1, "day").format("YYYY-MM-DD"));
 
 /* Defaults: From = yesterday; To = yesterday */
-const startDate = ref(yesterdayStr.value)
-const endDate = ref(yesterdayStr.value)
+const startDate = ref(yesterdayStr.value);
+const endDate = ref(yesterdayStr.value);
 
-const q = ref('')
+const q = ref("");
 
-const printRef = ref(null)
+const printRef = ref(null);
 
-const scheduleByDeptId = computed(()=>{
-  const m = new Map()
-  for(const s of schedules.value) m.set(s.department_id, s)
-  return m
-})
+const scheduleByDeptId = computed(() => {
+  const m = new Map();
+  for (const s of schedules.value) m.set(s.department_id, s);
+  return m;
+});
 
-const deptName = computed(()=>{
-  const d = departments.value.find(x => x.department_id === deptId.value)
-  return d ? d.department_name : ''
-})
+/* --- jake-oncall lookups --- */
+const onCallRowsByUserId = computed(() => {
+  const m = new Map();
+  for (const row of onCallList.value) {
+    const uid = Number(row.user_id ?? row.user ?? row.employee_id);
+    if (!uid) continue;
+    if (!m.has(uid)) m.set(uid, []);
+    m.get(uid).push(row);
+  }
+  return m;
+});
+const onCallScheduleById = computed(() => {
+  const m = new Map();
+  for (const s of onCallSchedules.value) m.set(Number(s.id), s);
+  return m;
+});
+
+/* Determine effective schedule for a given user and date (jake-oncall) */
+function getEffectiveScheduleForDate(userId, ymd) {
+  const deptSched =
+    scheduleByDeptId.value.get(
+      users.value.find((u) => u.user_id === userId)?.user_department
+    ) || null;
+  const rows = onCallRowsByUserId.value.get(Number(userId)) || [];
+  const today = dayjs(ymd, "YYYY-MM-DD");
+
+  for (const oc of rows) {
+    const schedId = Number(oc.dept_sched_id ?? oc.dept_schedule_id ?? oc.schedule_id);
+    if (!schedId) continue;
+    const ocSched = onCallScheduleById.value.get(schedId);
+    if (!ocSched) continue;
+
+    const startStr = String(ocSched.schedule_date ?? ocSched.date ?? "");
+    if (!startStr) continue;
+    const start = dayjs(startStr, "YYYY-MM-DD");
+    if (!start.isValid()) continue;
+
+    const span = Number(ocSched.working_days ?? deptSched?.working_days ?? 1);
+    const end = start.add(Math.max(1, span) - 1, "day"); // inclusive
+
+    if (
+      (today.isAfter(start, "day") || today.isSame(start, "day")) &&
+      (today.isBefore(end, "day") || today.isSame(end, "day"))
+    ) {
+      return { sched: ocSched, source: "oncall", deptSched };
+    }
+  }
+  return { sched: deptSched, source: "dept", deptSched };
+}
+
+const deptName = computed(() => {
+  const d = departments.value.find((x) => x.department_id === deptId.value);
+  return d ? d.department_name : "";
+});
 
 /* Clamp dates to constraints whenever they change */
 watch([startDate, endDate], ([f, t]) => {
-  const min = dayjs(minStartStr.value)
-  const y = dayjs(yesterdayStr.value)
+  const min = dayjs(minStartStr.value);
+  const y = dayjs(yesterdayStr.value);
 
-  let fD = dayjs(String(f || minStartStr.value))
-  let tD = dayjs(String(t || yesterdayStr.value))
+  let fD = dayjs(String(f || minStartStr.value));
+  let tD = dayjs(String(t || yesterdayStr.value));
 
-  if (fD.isBefore(min)) fD = min
-  if (fD.isAfter(y)) fD = y
+  if (fD.isBefore(min)) fD = min;
+  if (fD.isAfter(y)) fD = y;
 
-  if (tD.isAfter(y)) tD = y
-  if (tD.isBefore(fD)) tD = fD
+  if (tD.isAfter(y)) tD = y;
+  if (tD.isBefore(fD)) tD = fD;
 
-  const fNew = fD.format('YYYY-MM-DD')
-  const tNew = tD.format('YYYY-MM-DD')
+  const fNew = fD.format("YYYY-MM-DD");
+  const tNew = tD.format("YYYY-MM-DD");
 
-  if (fNew !== (startDate.value || '')) startDate.value = fNew
-  if (tNew !== (endDate.value || '')) endDate.value = tNew
-})
+  if (fNew !== (startDate.value || "")) startDate.value = fNew;
+  if (tNew !== (endDate.value || "")) endDate.value = tNew;
+});
 
-const employeesInDept = computed(()=> users.value.filter(u => u.user_department === deptId.value))
+const employeesInDept = computed(() =>
+  users.value.filter((u) => u.user_department === deptId.value)
+);
 
-const dateList = computed(()=>{
-  const from = dayjs(startDate.value || minStartStr.value)
-  const to = dayjs(endDate.value || yesterdayStr.value)
-  const days = []
-  const start = from.isAfter(to) ? to : from
-  const end = from.isAfter(to) ? from : to
-  let cur = start
-  while(cur.isBefore(end) || cur.isSame(end,'day')){
-    days.push(cur.format('YYYY-MM-DD'))
-    cur = cur.add(1,'day')
+const dateList = computed(() => {
+  const from = dayjs(startDate.value || minStartStr.value);
+  const to = dayjs(endDate.value || yesterdayStr.value);
+  const days = [];
+  const start = from.isAfter(to) ? to : from;
+  const end = from.isAfter(to) ? from : to;
+  let cur = start;
+  while (cur.isBefore(end) || cur.isSame(end, "day")) {
+    days.push(cur.format("YYYY-MM-DD"));
+    cur = cur.add(1, "day");
   }
-  return days
-})
+  return days;
+});
 
-const prettyRange = computed(()=>{
-  if(dateList.value.length===1) return dayjs(dateList.value[0]).format('MMM D, YYYY')
-  const first = dayjs(dateList.value[0]).format('MMM D, YYYY')
-  const last = dayjs(dateList.value[dateList.value.length-1]).format('MMM D, YYYY')
-  return `${first} — ${last}`
-})
+const prettyRange = computed(() => {
+  if (dateList.value.length === 1) return dayjs(dateList.value[0]).format("MMM D, YYYY");
+  const first = dayjs(dateList.value[0]).format("MMM D, YYYY");
+  const last = dayjs(dateList.value[dateList.value.length - 1]).format("MMM D, YYYY");
+  return `${first} — ${last}`;
+});
 
 /* ---------- Helpers (EN/EM dash normalization) ---------- */
-function toWorkingSet(noteRaw){
+function toWorkingSet(noteRaw) {
   // Normalize both EN DASH (U+2013) and EM DASH (U+2014) to hyphen
-  const normalize = (txt) => String(txt || '').replace(/[\u2013\u2014]/g, '-').trim()
-  const note = normalize(noteRaw) || 'Mon-Fri' // default if missing
-  const idx = { sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6 }
-  const key = (s) => String(s).slice(0,3).toLowerCase()
-  const set = new Set()
-  note.split(',').map(p=>p.trim()).filter(Boolean).forEach(part => {
-    const m = part.match(/^([A-Za-z]{3,})\s*-\s*([A-Za-z]{3,})$/)
-    if (m) {
-      const a = idx[key(m[1])], b = idx[key(m[2])]
-      if (a==null || b==null) return
-      let i = a
-      while (true) {
-        set.add(i)
-        if (i === b) break
-        i = (i + 1) % 7
+  const normalize = (txt) =>
+    String(txt || "")
+      .replace(/[\u2013\u2014]/g, "-")
+      .trim();
+  const note = normalize(noteRaw) || "Mon-Fri"; // default if missing
+  const idx = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  const key = (s) => String(s).slice(0, 3).toLowerCase();
+  const set = new Set();
+  note
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const m = part.match(/^([A-Za-z]{3,})\s*-\s*([A-Za-z]{3,})$/);
+      if (m) {
+        const a = idx[key(m[1])];
+        const b = idx[key(m[2])];
+        if (a == null || b == null) return;
+        let i = a;
+        while (true) {
+          set.add(i);
+          if (i === b) break;
+          i = (i + 1) % 7;
+        }
+      } else {
+        const k = idx[key(part)];
+        if (k != null) set.add(k);
       }
-    } else {
-      const k = idx[key(part)]
-      if (k!=null) set.add(k)
-    }
-  })
-  if (set.size === 0) [1,2,3,4,5].forEach(d => set.add(d)) // Mon–Fri fallback
-  return set
+    });
+  if (set.size === 0) [1, 2, 3, 4, 5].forEach((d) => set.add(d)); // Mon–Fri fallback
+  return set;
 }
 
 function pickTime(obj, keys) {
-  for (const k of keys) if (obj && obj[k]) return obj[k]
-  return null
+  for (const k of keys) if (obj && obj[k]) return obj[k];
+  return null;
 }
 
 function parseHM(baseDate, hm) {
-  if (!hm) return null
-  const s = String(hm).trim()
+  if (!hm) return null;
+  const s = String(hm).trim();
   // HH:mm or HH:mm:ss
   if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
-    const hhmmss = /^\d{1,2}:\d{2}$/.test(s) ? s + ':00' : s
-    return dayjs(`${baseDate}T${hhmmss}`)
+    const hhmmss = /^\d{1,2}:\d{2}$/.test(s) ? s + ":00" : s;
+    return dayjs(`${baseDate}T${hhmmss}`);
   }
   // h:mm am/pm
-  const m = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i)
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
   if (m) {
-    let hh = parseInt(m[1],10) % 12
-    if (/p/i.test(m[3])) hh += 12
-    const mm = String(parseInt(m[2],10)).padStart(2,'0')
-    return dayjs(`${baseDate}T${String(hh).padStart(2,'0')}:${mm}:00`)
+    let hh = parseInt(m[1], 10) % 12;
+    if (/p/i.test(m[3])) hh += 12;
+    const mm = String(parseInt(m[2], 10)).padStart(2, "0");
+    return dayjs(`${baseDate}T${String(hh).padStart(2, "0")}:${mm}:00`);
   }
-  const dt = dayjs(s)
-  return dt.isValid() ? dt : null
+  const dt = dayjs(s);
+  return dt.isValid() ? dt : null;
 }
 
-/* ---------- Build one row per employee per date (EmployeeDetail logic) ---------- */
-function buildRow(u, ymd){
-  const rec = attendance.value.find(a => a.user_id === u.user_id && a.log_date === ymd)
-  const sched = scheduleByDeptId.value.get(u.user_department) || {}
+/* ---------- Build one row per employee per date WITH jake-oncall ---------- */
+function buildRow(u, ymd) {
+  const rec = attendance.value.find((a) => a.user_id === u.user_id && a.log_date === ymd);
 
-  // Working day check (Rest Day if not included)
-  const workingSet = toWorkingSet(
-    sched.workdays_note || sched.workdays || sched.work_days || sched.work_days_note
-  )
-  const dow = dayjs(ymd).day()
-  const isWorkingDay = workingSet.has(dow)
+  // Effective schedule (oncall overrides department)
+  const { sched: effSched, source, deptSched } = getEffectiveScheduleForDate(
+    u.user_id,
+    ymd
+  );
 
-  // If not a working day -> Rest Day
+  // Working day check:
+  // - If oncall is active today => always a working day (no Rest Day)
+  // - Else use department workdays_note to determine Rest Day
+  let isWorkingDay = true;
+  if (source === "dept") {
+    const workingSet = toWorkingSet(
+      deptSched?.workdays_note ||
+        deptSched?.workdays ||
+        deptSched?.work_days ||
+        deptSched?.work_days_note
+    );
+    const dow = dayjs(ymd).day();
+    isWorkingDay = workingSet.has(dow);
+  }
+
   if (!isWorkingDay) {
     return {
       key: `r-${u.user_id}-${ymd}`,
-      empName: `${u.user_fname || ''} ${u.user_lname || ''}`.trim(),
-      status: 'Rest Day',
-      punctuality: '—',
+      empName: `${u.user_fname || ""} ${u.user_lname || ""}`.trim(),
+      status: "Rest Day",
+      punctuality: "—",
+      workMinutes: undefined,
       lateMinutes: undefined,
       overtimeMinutes: undefined,
       date: ymd,
-      schedule: sched
-    }
+      schedule: effSched,
+    };
   }
 
   // Working day with no attendance -> Absent
   if (!rec || (!rec.time_in && !rec.time_out)) {
     return {
       key: `r-${u.user_id}-${ymd}`,
-      empName: `${u.user_fname || ''} ${u.user_lname || ''}`.trim(),
-      status: 'Absent',
-      punctuality: '—',
+      empName: `${u.user_fname || ""} ${u.user_lname || ""}`.trim(),
+      status: "Absent",
+      punctuality: "—",
+      workMinutes: undefined,
       lateMinutes: undefined,
       overtimeMinutes: undefined,
       date: ymd,
-      schedule: sched
-    }
+      schedule: effSched,
+    };
   }
 
-  // Working day with attendance -> Present; compute Late/OT like EmployeeDetail.vue
-  const expectedStart = sched?.work_start || '08:00:00'
-  const expectedEnd   = sched?.work_end   || '17:00:00'
+  // Present -> compute metrics using EFFECTIVE schedule
+  const expectedStart = effSched?.work_start || "08:00:00";
+  const expectedEnd = effSched?.work_end || "17:00:00";
 
   const stat = computeStatus({
     time_in: rec.time_in,
     time_out: rec.time_out,
     expectedStart,
     expectedEnd,
-  })
+  });
 
-  // ---- Custom lateness sum (start + lunch_end + break_end) with 5-min grace ----
-  const baseDate = String(ymd)
-  const schedStart    = parseHM(baseDate, sched?.work_start || '08:00:00')
-  const schedLunchEnd = parseHM(baseDate, sched?.lunch_end  || sched?.lunchEnd || null)
-  const schedBreakEnd = parseHM(baseDate, sched?.break_end  || sched?.breakEnd || null)
+  const baseDate = String(ymd);
+  const schedStart = parseHM(baseDate, expectedStart);
+  const schedEnd = parseHM(baseDate, expectedEnd);
+  const outDJ = parseHM(baseDate, rec.time_out);
 
-  const graceTime = schedStart ? schedStart.add(5, 'minute') : null
-
-  const lunchEndRaw  = pickTime(rec, ['lunch_end','lunchEnd','lunch_out','lunchOut'])
-  const breakEndRaw  = pickTime(rec, ['break_end','breakEnd','break_out','breakOut'])
-
-  const actualIn        = parseHM(baseDate, rec.time_in)
-  const actualLunchEnd  = parseHM(baseDate, lunchEndRaw)
-  const actualBreakEnd  = parseHM(baseDate, breakEndRaw)
-
-  let lateFromIn = 0
-  if (graceTime && actualIn && actualIn.isAfter(graceTime)) {
-    lateFromIn = actualIn.diff(graceTime, 'minute')
+  /* --- Work Hours (per your rule) --- */
+  let workMins = 0;
+  if (schedEnd) {
+    if (!outDJ && rec.time_in) {
+      workMins = 240;
+    } else if (outDJ && outDJ.isBefore(schedEnd)) {
+      const ut = Math.max(0, Math.ceil(schedEnd.diff(outDJ, "second") / 60));
+      workMins = Math.max(0, 480 - ut);
+    } else {
+      workMins = 480;
+    }
   }
-  let lateFromLunchEnd = 0
-  if (schedLunchEnd && actualLunchEnd && actualLunchEnd.isAfter(schedLunchEnd)) {
-    lateFromLunchEnd = actualLunchEnd.diff(schedLunchEnd, 'minute')
-  }
-  let lateFromBreakEnd = 0
-  if (schedBreakEnd && actualBreakEnd && actualBreakEnd.isAfter(schedBreakEnd)) {
-    lateFromBreakEnd = actualBreakEnd.diff(schedBreakEnd, 'minute')
-  }
-  const customLateMinutes = lateFromIn + lateFromLunchEnd + lateFromBreakEnd
-  // ------------------------------------------------------------
 
-  const status = 'Present' // restrict labels to Present/Absent/Rest Day
-  const punctuality = customLateMinutes > 0 ? 'Late' : 'On Time'
+  /* --- Late (grace + lunch over 60 + break over 30) with FLOOR to avoid over a minute --- */
+  const inDJ = parseHM(baseDate, rec.time_in);
+  const grace = schedStart ? schedStart.add(5, "minute") : null;
+  let lateFromIn = 0;
+  if (inDJ && grace && inDJ.isAfter(grace)) {
+    lateFromIn = Math.max(0, Math.floor(inDJ.diff(grace, "second") / 60));
+  }
+
+  // Lunch duration (attendance-only)
+  const lunchStartDJ = parseHM(
+    baseDate,
+    pickTime(rec, ["lunch_start", "lunchStart", "lunch_in", "lunchIn"])
+  );
+  const lunchEndDJ = parseHM(
+    baseDate,
+    pickTime(rec, ["lunch_end", "lunchEnd", "lunch_out", "lunchOut"])
+  );
+  let lunchExtra = 0;
+  if (lunchStartDJ && lunchEndDJ && lunchEndDJ.isAfter(lunchStartDJ)) {
+    const dur = Math.max(0, Math.floor(lunchEndDJ.diff(lunchStartDJ, "second") / 60));
+    lunchExtra = Math.max(0, dur - 60);
+  }
+
+  // Break duration (attendance-only)
+  const breakStartDJ = parseHM(
+    baseDate,
+    pickTime(rec, ["break_start", "breakStart", "break_in", "breakIn"])
+  );
+  const breakEndDJ = parseHM(
+    baseDate,
+    pickTime(rec, ["break_end", "breakEnd", "break_out", "breakOut"])
+  );
+  let breakExtra = 0;
+  if (breakStartDJ && breakEndDJ && breakEndDJ.isAfter(breakStartDJ)) {
+    const dur = Math.max(0, Math.floor(breakEndDJ.diff(breakStartDJ, "second") / 60));
+    breakExtra = Math.max(0, dur - 30);
+  }
+
+  const customLateMinutes = Math.max(0, lateFromIn + lunchExtra + breakExtra);
+  const status = "Present";
+  const punctuality = customLateMinutes > 0 ? "Late" : "On Time";
 
   return {
     key: `r-${u.user_id}-${ymd}`,
-    empName: `${u.user_fname || ''} ${u.user_lname || ''}`.trim(),
+    empName: `${u.user_fname || ""} ${u.user_lname || ""}`.trim(),
     status,
     punctuality,
+    workMinutes: workMins,
     lateMinutes: customLateMinutes,
     overtimeMinutes: stat.overtimeMinutes ?? 0,
     time_in: rec.time_in,
     time_out: rec.time_out,
     date: ymd,
-    schedule: sched
-  }
+    schedule: effSched,
+  };
 }
 
-const consistentNames = computed(()=>{
-  // Present and On Time for every day in range (uses the same buildRow logic)
-  const names = []
+const consistentNames = computed(() => {
+  // Present and On Time for every day in range
+  const names = [];
   for (const u of employeesInDept.value) {
-    const name = `${u.user_fname || ''} ${u.user_lname || ''}`.trim()
-    if (!name) continue
-    const allOnTime = dateList.value.length>0 && dateList.value.every(d => {
-      const row = buildRow(u, d)
-      return row.status === 'Present' && row.punctuality === 'On Time'
-    })
-    if (allOnTime) names.push(name)
+    const name = `${u.user_fname || ""} ${u.user_lname || ""}`.trim();
+    if (!name) continue;
+    const allOnTime =
+      dateList.value.length > 0 &&
+      dateList.value.every((d) => {
+        const row = buildRow(u, d);
+        return row.status === "Present" && row.punctuality === "On Time";
+      });
+    if (allOnTime) names.push(name);
   }
-  return Array.from(new Set(names)).sort((a,b)=>a.localeCompare(b))
-})
+  return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+});
 
 /* DESCENDING dates here */
-const groups = computed(()=>{
-  const needle = (q.value || '').toLowerCase()
-  const list = []
-  const orderedDates = [...dateList.value].sort((a,b) => String(b).localeCompare(String(a))) // newest → oldest
-  for (const ymd of orderedDates){
+const groups = computed(() => {
+  const needle = (q.value || "").toLowerCase();
+  const list = [];
+  const orderedDates = [...dateList.value].sort((a, b) =>
+    String(b).localeCompare(String(a))
+  ); // newest → oldest
+  for (const ymd of orderedDates) {
     const rows = employeesInDept.value
-      .map(u => {
-        const name = `${u.user_fname || ''} ${u.user_lname || ''}`.trim()
-        if (needle && !name.toLowerCase().includes(needle)) return null
-        return buildRow(u, ymd)
+      .map((u) => {
+        const name = `${u.user_fname || ""} ${u.user_lname || ""}`.trim();
+        if (needle && !name.toLowerCase().includes(needle)) return null;
+        return buildRow(u, ymd);
       })
-      .filter(Boolean)
-    list.push({ ymd, rows })
+      .filter(Boolean);
+    list.push({ ymd, rows });
   }
-  return list
-})
+  return list;
+});
 
 /* ---------- Totals for KPI cards ---------- */
 const totalLateMinutes = computed(() =>
-  groups.value.reduce((sum, g) =>
-    sum + g.rows.reduce((s, r) => s + (typeof r.lateMinutes === 'number' ? r.lateMinutes : 0), 0)
-  , 0)
-)
+  groups.value.reduce(
+    (sum, g) =>
+      sum +
+      g.rows.reduce(
+        (s, r) => s + (typeof r.lateMinutes === "number" ? r.lateMinutes : 0),
+        0
+      ),
+    0
+  )
+);
 const totalOvertimeMinutes = computed(() =>
-  groups.value.reduce((sum, g) =>
-    sum + g.rows.reduce((s, r) => s + (typeof r.overtimeMinutes === 'number' ? r.overtimeMinutes : 0), 0)
-  , 0)
-)
-const totalLateHHMM = computed(() => minutesToHHMM(totalLateMinutes.value))
-const totalOvertimeHHMM = computed(() => minutesToHHMM(totalOvertimeMinutes.value))
+  groups.value.reduce(
+    (sum, g) =>
+      sum +
+      g.rows.reduce(
+        (s, r) => s + (typeof r.overtimeMinutes === "number" ? r.overtimeMinutes : 0),
+        0
+      ),
+    0
+  )
+);
+const totalLateHHMM = computed(() => minutesToHHMM(totalLateMinutes.value));
+const totalOvertimeHHMM = computed(() => minutesToHHMM(totalOvertimeMinutes.value));
 
-onMounted(async()=>{
-  const [u,d,s,a] = await Promise.all([fetchUsers(), fetchDepartments(), fetchSchedules(), fetchAttendance()])
-  users.value = u; departments.value = d; schedules.value = s; attendance.value = a
-  if(d && d.length) deptId.value = d[0].department_id
+onMounted(async () => {
+  const [u, d, s, a, ocList, ocScheds] = await Promise.all([
+    fetchUsers(),
+    fetchDepartments(),
+    fetchSchedules(),
+    fetchAttendance(),
+    fetchOnCallList(),
+    fetchOnCallSchedules(),
+  ]);
+  users.value = u;
+  departments.value = d;
+  schedules.value = s;
+  attendance.value = a;
+  onCallList.value = ocList;
+  onCallSchedules.value = ocScheds;
+
+  if (d && d.length) deptId.value = d[0].department_id;
 
   // Ensure defaults still respect constraints on initial load
-  if (dayjs(startDate.value).isBefore(minStartStr.value)) startDate.value = minStartStr.value
-  if (dayjs(endDate.value).isAfter(yesterdayStr.value)) endDate.value = yesterdayStr.value
-  if (dayjs(endDate.value).isBefore(startDate.value)) endDate.value = startDate.value
-})
+  if (dayjs(startDate.value).isBefore(minStartStr.value))
+    startDate.value = minStartStr.value;
+  if (dayjs(endDate.value).isAfter(yesterdayStr.value))
+    endDate.value = yesterdayStr.value;
+  if (dayjs(endDate.value).isBefore(startDate.value)) endDate.value = startDate.value;
+});
 
 /* ---------- Status column returns row.status (restricted set) ---------- */
 function computeRowStatus(r) {
-  const allowed = new Set(['Present','Absent','Rest Day'])
-  const s = (r.status || '').trim()
-  if (allowed.has(s)) return s
-  const hasAttendance = !!(r.time_in || r.timeIn || r.time_out || r.timeOut || r.clock_in || r.clock_out)
-  return hasAttendance ? 'Present' : 'Absent'
+  const allowed = new Set(["Present", "Absent", "Rest Day"]);
+  const s = (r.status || "").trim();
+  if (allowed.has(s)) return s;
+  const hasAttendance = !!(
+    r.time_in ||
+    r.timeIn ||
+    r.time_out ||
+    r.timeOut ||
+    r.clock_in ||
+    r.clock_out
+  );
+  return hasAttendance ? "Present" : "Absent";
 }
 
 /* ---------- Print important details ---------- */
 function printDetails() {
   try {
-    const w = window.open('', '_blank')
-    const content = printRef.value ? printRef.value.innerHTML : '<p>No records to print.</p>'
-    const title = 'Department Reports'
-    const dept = deptName.value || '—'
-    const range = prettyRange.value
+    const w = window.open("", "_blank");
+    const content = printRef.value
+      ? printRef.value.innerHTML
+      : "<p>No records to print.</p>";
+    const title = "Department Reports";
+    const dept = deptName.value || "—";
+    const range = prettyRange.value;
 
     w.document.write(`<!doctype html>
 <html>
@@ -481,18 +663,21 @@ function printDetails() {
   ${content}
   <script>window.onload=function(){window.print(); setTimeout(()=>window.close(), 250);}<\/script>
 </body>
-</html>`)
-    w.document.close()
+</html>`);
+    w.document.close();
   } catch (e) {
-    console.error('Print failed', e)
-    window.print()
+    console.error("Print failed", e);
+    window.print();
   }
 }
 </script>
 
 <style scoped>
 /* Page structure */
-.page { display: grid; gap: 12px; }
+.page {
+  display: grid;
+  gap: 12px;
+}
 
 /* Cards */
 .card {
@@ -504,7 +689,9 @@ function printDetails() {
 }
 
 /* Header */
-.header-card { padding: 16px; }
+.header-card {
+  padding: 16px;
+}
 .header-top {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -525,6 +712,16 @@ function printDetails() {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+
+/* Keep both the date chip and the print button compact (no stretching) */
+.header-actions .range-wrap,
+.header-actions .btn-print {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: max-content;
+  white-space: nowrap;
+}
+
 .range-wrap {
   display: inline-flex;
   align-items: center;
@@ -536,8 +733,14 @@ function printDetails() {
   color: #374151;
   font-weight: 600;
 }
-.range-icon { font-size: 12px; line-height: 1; }
-.range-badge { font-size: 12px; letter-spacing: .01em; }
+.range-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.range-badge {
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
 
 /* Button */
 .btn {
@@ -552,13 +755,22 @@ function printDetails() {
   font-weight: 700;
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(17,24,39,.06);
-  transition: transform .06s ease, box-shadow .12s ease, opacity .12s ease;
+  box-shadow: 0 2px 4px rgba(17, 24, 39, 0.06);
+  transition: transform 0.06s ease, box-shadow 0.12s ease, opacity 0.12s ease;
 }
-.btn:hover { opacity: .96; transform: translateY(-1px); }
-.btn:active { transform: translateY(0); }
-.btn-icon { display: block; }
-.btn-print { padding-inline: 14px; }
+.btn:hover {
+  opacity: 0.96;
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
+}
+.btn-icon {
+  display: block;
+}
+.btn-print {
+  padding-inline: 14px;
+}
 
 /* Filters */
 .filters {
@@ -573,14 +785,28 @@ function printDetails() {
   flex-direction: column;
   gap: 6px;
 }
-.field.grow { grid-column: span 6 / span 6; }
-@media (max-width: 900px) {
-  .header-top { grid-template-columns: 1fr; }
-  .header-actions { justify-content: flex-start; }
-  .field, .field.grow { grid-column: span 12 / span 12; }
+.field.grow {
+  grid-column: span 6 / span 6;
 }
-label { font-size: 12px; color: #6b7280; font-weight: 600; }
-input, select {
+@media (max-width: 900px) {
+  .header-top {
+    grid-template-columns: 1fr;
+  }
+  .header-actions {
+    justify-content: flex-start;
+  }
+  .field,
+  .field.grow {
+    grid-column: span 12 / span 12;
+  }
+}
+label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 600;
+}
+input,
+select {
   padding: 9px 10px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
@@ -588,7 +814,10 @@ input, select {
   font-size: 14px;
   background: #fff;
 }
-input:focus, select:focus { border-color: #111827; }
+input:focus,
+select:focus {
+  border-color: #111827;
+}
 
 /* KPI Grid */
 .kpi-grid {
@@ -610,11 +839,15 @@ input:focus, select:focus { border-color: #111827; }
 .kpi-label {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: .02em;
+  letter-spacing: 0.02em;
   color: #6b7280;
   text-transform: uppercase;
 }
-.kpi-value { font-size: 28px; font-weight: 800; line-height: 1; }
+.kpi-value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
 
 /* Consistent section */
 .consistent {
@@ -638,7 +871,10 @@ input:focus, select:focus { border-color: #111827; }
   align-items: center;
   gap: 8px;
 }
-.consistent-count { font-size: 12px; color: #6b7280; }
+.consistent-count {
+  font-size: 12px;
+  color: #6b7280;
+}
 .chips {
   display: flex;
   gap: 8px;
@@ -657,7 +893,7 @@ input:focus, select:focus { border-color: #111827; }
   background: #fff;
   font-size: 12px;
   color: #374151;
-  box-shadow: 0 1px 1px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
 }
 
 /* Table */
@@ -687,11 +923,19 @@ input:focus, select:focus { border-color: #111827; }
   padding: 10px;
   vertical-align: middle;
 }
-.table tbody tr:hover { background: #fafafa; }
-.col-name { width: 36%; }
-.emp-name { font-weight: 600; color: #111827; }
+.table tbody tr:hover {
+  background: #fafafa;
+}
+.col-name {
+  width: 36%;
+}
+.emp-name {
+  font-weight: 600;
+  color: #111827;
+}
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
 }
 
 /* Chips for statuses */
@@ -726,9 +970,22 @@ input:focus, select:focus { border-color: #111827; }
 }
 
 /* Small helpers */
-.muted { color: #6b7280; }
-.center { text-align: center; }
-.dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
-.dot-ok { background: #10b981; }
-.row-consistent td { background: rgba(16, 185, 129, 0.08); }
+.muted {
+  color: #6b7280;
+}
+.center {
+  text-align: center;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.dot-ok {
+  background: #10b981;
+}
+.row-consistent td {
+  background: rgba(16, 185, 129, 0.08);
+}
 </style>
