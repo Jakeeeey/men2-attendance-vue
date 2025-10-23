@@ -129,6 +129,16 @@
                   <div class="dmy">{{ d.dmy }}</div>
                 </div>
               </th>
+              <!-- NEW TOTAL COLUMNS (rowspan to cover both header rows) -->
+              <th class="total-head" rowspan="2" :style="{ minWidth: colMinPx }">
+                Total Work Hours
+              </th>
+              <th class="total-head" rowspan="2" :style="{ minWidth: colMinPx }">
+                Total Late
+              </th>
+              <th class="total-head" rowspan="2" :style="{ minWidth: colMinPx }">
+                Total Overtime
+              </th>
             </tr>
             <!-- T / L / O / U -->
             <tr>
@@ -216,11 +226,22 @@
                     </td>
                   </template>
                 </template>
+
+                <!-- NEW: ROW TOTALS -->
+                <td class="kcell total total-work" :style="{ minWidth: colMinPx }">
+                  {{ displayHMM(rowTotals(u.user_id).w) }}
+                </td>
+                <td class="kcell total total-late" :style="{ minWidth: colMinPx }">
+                  {{ displayHMM(rowTotals(u.user_id).l) }}
+                </td>
+                <td class="kcell total total-ot" :style="{ minWidth: colMinPx }">
+                  {{ displayHMM(rowTotals(u.user_id).o) }}
+                </td>
               </tr>
             </template>
 
             <tr v-if="filteredUsers.length === 0">
-              <td class="center muted" :colspan="days.length * perDayCols + 1">
+              <td class="center muted" :colspan="days.length * perDayCols + 4">
                 No employees for the selected filters.
               </td>
             </tr>
@@ -342,7 +363,11 @@ const perDayCols = computed(() => {
 });
 const groupMinPx = computed(() => `${colMin.value * perDayCols.value}px`);
 const gridMinPx = computed(() => {
-  const cols = days.value.length * perDayCols.value * colMin.value + nameMin.value;
+  // +3 for the three total columns at the far right
+  const cols =
+    days.value.length * perDayCols.value * colMin.value +
+    nameMin.value +
+    3 * colMin.value;
   return `${cols}px`;
 });
 
@@ -545,6 +570,9 @@ function cell(userId, ymd) {
       lateHHMM: "Absent",
       otHHMM: "Absent",
       utHHMM: "Absent",
+      workMins: 0,
+      lateMins: 0,
+      overtimeMins: 0,
     };
   }
 
@@ -626,6 +654,9 @@ function cell(userId, ymd) {
     lateHHMM: displayHMM(lateMins),
     otHHMM: displayHMM(overtimeMins),
     utHHMM: displayHMM(undertimeMins),
+    workMins,
+    lateMins,
+    overtimeMins,
   };
 }
 
@@ -637,7 +668,25 @@ function blankCell() {
     lateHHMM: "—",
     otHHMM: "—",
     utHHMM: "—",
+    workMins: 0,
+    lateMins: 0,
+    overtimeMins: 0,
   };
+}
+
+/* Sum totals per user across the visible day range */
+function rowTotals(userId) {
+  let w = 0,
+    l = 0,
+    o = 0;
+  for (const d of days.value) {
+    const c = cell(userId, d.ymd);
+    // Count only numeric minutes (RD/Absent contribute 0)
+    w += Number(c.workMins || 0);
+    l += Number(c.lateMins || 0);
+    o += Number(c.overtimeMins || 0);
+  }
+  return { w, l, o };
 }
 
 /* Filters */
@@ -985,6 +1034,10 @@ select {
   border-right: 1px solid var(--border, #e5e7eb);
   background: #f3f4f6;
 }
+.total-head {
+  background: #e8f0ff;
+  border-left: 2px solid #c7d2fe;
+}
 
 /* Body */
 .grid-table tbody tr:nth-child(odd) td:not(.sticky-col) {
@@ -1079,6 +1132,19 @@ select {
   background: #f1f5f9;
   color: #475569;
   font-weight: 700;
+}
+
+/* NEW: total cells on the far right */
+.kcell.total {
+  background: #f8fafc;
+  font-weight: 700;
+}
+.kcell.total-work {
+  border-left: 2px solid #c7d2fe;
+}
+.kcell.total-late {
+}
+.kcell.total-ot {
 }
 
 /* Quick chips */

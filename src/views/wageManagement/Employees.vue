@@ -47,12 +47,13 @@
               </td>
               <td>{{ deptName(u.user_department) }}</td>
               <td>
-                <button
+                <!-- <button
                   class="primary"
                   @click="$router.push({ name: 'employee', params: { id: u.user_id } })"
                 >
                   View Attendance
-                </button>
+                </button> -->
+                <button class="primary">Manage</button>
               </td>
             </tr>
             <tr v-if="filteredEmployees.length === 0">

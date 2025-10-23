@@ -52,7 +52,7 @@
       </div>
 
       <!-- Wage Management Menu -->
-      <button
+      <!-- <button
         class="nav-item parent"
         @click="toggleWageManagement"
         aria-expanded="wageManagement"
@@ -71,7 +71,7 @@
         >
           Employees
         </router-link>
-      </div>
+      </div> -->
     </nav>
   </aside>
 </template>
